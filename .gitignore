@@ -1,0 +1,42 @@
+# ===== Python =====
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+
+# ===== Env =====
+.venv/
+env/
+.conda/
+
+# ===== Editor =====
+.vscode/
+
+# ===== Large data (your project) =====
+dataset/
+synthetic_soiling/
+
+# ===== Training outputs / logs =====
+baseline/runs/
+runs/
+wandb/
+logs/
+tmp/
+
+# ===== LoRA outputs (防误入) =====
+sd_scripts/lora/output/
+
+# ===== Large model / archives =====
+*.ckpt
+*.pt
+*.pth
+*.safetensors
+*.onnx
+*.pkl
+*.npz
+*.tar
+*.tar.gz
+*.zip
+*.7z
+
+# ===== Tooling =====
+.claude/
