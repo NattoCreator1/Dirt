@@ -14,6 +14,7 @@ env/
 # ===== Large data (your project) =====
 dataset/
 synthetic_soiling/
+sd_scripts/lora/output/
 
 # ===== Training outputs / logs =====
 baseline/runs/
