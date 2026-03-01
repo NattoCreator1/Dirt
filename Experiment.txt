@@ -1,0 +1,730 @@
+## 实验大纲 vFinal++（0131 补全版：数据预处理已落地 + 强化 SD 增强与时序创新点）
+
+## Step 0 研究目标与核心贡献
+
+### 0.1 目标（保持不变）
+
+构建车载镜头脏污检测模型，输出：
+
+* tile 级 (4) 类覆盖率 (\hat{\mathbf{G}}\in[0,1]^{8\times 8\times 4})
+* 全局连续严重度 (\hat{S}\in[0,1])（主输出）
+* 全局 (4) 档等级 (\hat{L}\in{0,1,2,3})（统计/采样/触发）
+
+### 0.2 核心贡献点（补全表述，强调 SD 与时序）
+
+原大纲的闭环链路保持，同时把"时序合成 + 时序 embedding"提升为并列的创新点之一：
+
+1. **Severity Score 定义（标签侧）**：opacity-aware + 空间重要性 + dominance，并对 transparent 主导 dominance 连续降权。
+2. **Differentiable Severity Aggregator（模型侧）**：由 (\hat{\mathbf{G}}) 计算 (\tilde{S})，用一致性损失约束 (\hat{S}\approx\tilde{S})。
+3. **时序一致性建模（固定脏污 vs 变化场景）**：利用脏污相对镜头固定、场景相对变化的物理特性，通过时序编码模块与时序损失提升真实视频场景鲁棒性。
+4. **SD 合成增强闭环（静态）**：基于 mask 的 SD 合成获得强标注（像素/tile/severity），并通过对齐与筛选提升泛化。
+5. **SD 时序合成 + 时序监督（SD_seq）**：生成"脏污随时间演化"的序列强标注数据，为时序模块提供可控的时序监督信号。
+6. **车道线 probe 功能验证**：低工作量探针证明 (\hat{S}) 更能解释下游功能退化。
+
+**论文叙事逻辑**：
+- **贡献 1-2**: 建立"静态强监督基线"（WoodScape 强标注 + Severity Score 物理定义 + Aggregator）
+- **贡献 3**: "时序鲁棒建模"（利用脏污物理特性 + SD_seq 时序监督）
+- **贡献 4-5**: SD 数据增强闭环（静态合成 + 时序合成 + 域对齐）
+- **贡献 6**: 下游任务相关性验证
+
+---
+
+## Step 1 数据准备与标签构建
+
+## 1.1 WoodScape soiling（主数据，强标注）
+
+### 1.1.1 结构与校验（不变）
+
+* 输入：`woodscape_raw/{train,test}/{rgbImages,gtLabels}`
+* `gtLabels` 像素值 (\in{0,1,2,3})
+* 输出：`manifest_woodscape.csv`
+
+### 1.1.2 Split（不变）
+
+* `Test_Real = test`（(1000)）
+* `Train_Real = 3200`，`Val_Real = 800`（从 train 划分，固定随机种子）
+* 输出：`splits/*.csv`
+
+### 1.1.3 Tile 覆盖率标签 (\mathbf{G})（不变）
+
+[
+g_{i,j,c}=\frac{1}{|T_{i,j}|}\sum_{\mathbf{p}\in T_{i,j}}\mathbb{1}[Y(\mathbf{p})=c],\quad
+\sum_{c=0}^{3}g_{i,j,c}=1
+]
+
+* 输出 `.npz`：`tile_cov (8,8,4)` 等
+
+### 1.1.4 传统面积强度 (s)（对照用，不变）
+
+[
+p_c=\frac{1}{|\Omega|}\sum_{\mathbf{p}}\mathbb{1}[Y(\mathbf{p})=c],\quad
+s=1-p_0
+]
+
+
+---
+
+## 1.2 Severity Score (S) 与 (4) 档等级 (L)（标签侧核心）
+
+### 1.2.1 Opacity-aware（不变）
+
+[
+w=(0,0.33,0.66,1.0),\quad
+S_{\text{op}}=\sum_{c=1}^{3} w_c p_c
+]
+
+
+### 1.2.2 空间重要性（不变）
+
+[
+S_{\text{sp}}=\sum_{x,y} W(x,y)\cdot w_{Y(x,y)}
+]
+
+
+### 1.2.3 dominance + transparent 主导连续降权（不变）
+
+[
+s_{i,j}=\sum_{c=1}^{3} w_c g_{i,j,c},\quad
+(i^*,j^*)=\arg\max s_{i,j}
+]
+[
+r_{\text{tr}}=\frac{g_{i^*,j^*,1}}{g_{i^*,j^*,1}+g_{i^*,j^*,2}+g_{i^*,j^*,3}+\epsilon}
+]
+[
+S_{\text{dom}}=\left(1-\eta r_{\text{tr}}\right)\cdot \max s_{i,j},\quad \eta=0.9
+]
+
+
+### 1.2.4 融合得到连续严重度 (S)（不变）
+
+[
+S=\alpha S_{\text{op}}+\beta S_{\text{sp}}+\gamma S_{\text{dom}},\quad
+(\alpha,\beta,\gamma)=(0.6,0.3,0.1)
+]
+并裁剪到 ([0,1])。
+
+### 1.2.5 训练集自适应再分箱得到 (L)（你已完成）
+
+* clean 门槛：((s\le b_0\Rightarrow L=0,\ b_0=0.01))
+* 对 ((s>b_0)) 的样本，仅用 `Train_Real` 的 (S) 分位数：
+
+  * ((b_1=Q_{33%}),\ (b_2=Q_{66%}))
+    [
+    L=
+    \begin{cases}
+    0,& s\le b_0\
+    1,& S\le b_1\
+    2,& b_1<S\le b_2\
+    3,& S>b_2
+    \end{cases}
+    ]
+* 输出：`labels_index_all.csv`、`labels_index_rebinned.csv`、`rebinned_thresholds.json`（仅由 Train 估计）
+
+---
+
+## 1.3 Clean Domain（用于 SD 合成 / CycleGAN 域 A）（你已落地并补全）
+
+> 目的：从自采环视拼接视频中获得“干净域”图像，用作 SD 合成底图与域对齐的域 A。
+
+### 1.3.1 数据落盘（已完成）
+
+* 原始 clean 视频目录：
+  `dataset/my_clean_video_raw/`
+
+### 1.3.2 抽帧 + 六画面切分 + 规则过滤 + 去重（已完成）
+
+* 输入：(1920\times720) 的 (2\times3) 环视拼接帧
+* 切分为 (6) 张单镜头图像（每张 (640\times360)）：
+
+  * `lf, f, rf, lr, r, rr`
+* 过滤与去重：清晰度阈值、曝光/饱和/边缘比例约束、感知哈希去重（你的脚本已运行并得到约 (5000+) 张保留图像规模）
+
+产物（已存在并可复现）：
+
+* `dataset/my_clean_frames/{lf,f,rf,lr,r,rr}/*.jpg`
+* `dataset/my_clean_manifests/*.csv/json`（统计与溯源）
+
+### 1.3.3 几何统一到 (4:3) 且统一分辨率到 (640\times480)（已完成思路并已执行）
+
+* 原始：(640\times360)（(16:9)）
+* 变换：中心裁剪 (640\times360\to 480\times360)，再 resize (480\times360\to 640\times480)
+
+建议作为 clean 域最终输入目录（与后续训练/推理口径一致）：
+
+* `dataset/my_clean_frames_4by3_640x480/{lf,f,rf,lr,r,rr}/*.jpg`
+
+（中间产物 `dataset/my_clean_frames_4by3/` 可删除以节省空间，这一点你已处理。）
+
+### 1.3.4 输出 manifest（补全）
+
+* 输出：`manifest_clean.csv`（字段建议至少含：`image_path, view_id, source_video, timestamp/frame_id`）
+
+---
+
+## 1.4 External Dataset（自采弱标注，外部泛化测试）（你已落地并补全）
+
+> 目的：只用于外部泛化评测；按大纲，输出 `test_ext.csv`，评测以 global 分支为主。
+
+### 1.4.1 原始数据形态（已确认）
+
+* 根目录：`dataset/my_soiling_raw/`
+* 多个日期/来源子文件夹（结构不完全一致）
+* 常见子目录：`occlusion_a/occlusion_b/occlusion_c/occlusion_d/occlusion_e`
+* 弱标注含义：从 `a` 到 `e` 脏污逐渐减轻（`a` 最重，`e` 最轻）
+
+### 1.4.2 标准化整理（已完成方案并可直接固化为流程）
+
+规范输出目录（不改原数据，只做规范化拷贝）：
+
+```
+dataset/my_external_test/
+  images/occlusion_{a,b,c,d,e}/*.jpg
+  test_ext.csv
+  test_ext_summary.json
+  test_ext_bad_files.csv
+```
+
+弱标注映射（外部集无 clean）：
+
+* `occlusion_a` (\to) `ext_level=5`
+* `occlusion_b` (\to) `ext_level=4`
+* `occlusion_c` (\to) `ext_level=3`
+* `occlusion_d` (\to) `ext_level=2`
+* `occlusion_e` (\to) `ext_level=1`
+
+### 1.4.3 外部集几何统一（已确定为需要）
+
+外部原始 (640\times360)（(16:9)）同样统一到 (4:3) 的 (640\times480)，采用与 clean 域一致的：
+
+* 中心裁剪 (640\times360\to 480\times360)
+* resize (480\times360\to 640\times480)
+
+### 1.4.4 `test_ext.csv` 字段（补全）
+
+推荐字段：
+
+* `image_path`（规范化后的路径）
+* `label_raw`（如 `occlusion_a`）
+* `ext_level`（(1\sim5)）
+* `group_id`（来源文件夹/日期）
+* `view_id`（若可从路径推断）
+* `orig_path`（原图路径溯源）
+* `preprocess`（记录裁剪+缩放口径）
+
+---
+
+## Step 2 Baseline 模型（Real only）与 Differentiable Severity Aggregator（已实现，已完成验证）
+
+### 2.1 模型架构
+
+```
+Input [B,3,640,480]
+    ↓
+ResNet18 backbone (pretrained on ImageNet)
+    ↓
+Feature map [B,512,H,W]
+    ↓
+    ├─→ AdaptiveAvgPool(8x8) → Conv2d(512→4) → Softmax → G_hat [B,4,8,8]
+    │                                                   (tile head)
+    │
+    └─→ AdaptiveAvgPool → FC(512→1) → Sigmoid → S_hat [B,1]
+                                                    (global head)
+
+G_hat → SeverityAggregator → S_agg [B,1]
+```
+
+### 2.2 SeverityAggregator 设计
+
+**三個組成部分**：
+
+1. **Opacity-aware Mean (S_op)**: 加权平均，考虑不同类别的不透明度
+   ```
+   w = [0, 0.33, 0.66, 1.0]  # clean, transparent, semi-transparent, opaque
+   s[i,j] = Σ_c w_c · G_hat[c,i,j]
+   S_op = mean(s[i,j])
+   ```
+
+2. **Spatial Importance (S_sp)**: 空间加权，中心区域脏污权重更高
+   ```
+   W[x,y] = exp(-(x² + y²) / 2σ²)  # Gaussian weight, σ=0.5
+   S_sp = Σ_{i,j} W[i,j] · s[i,j]
+   ```
+
+3. **Dominance Pooling (S_dom)**: Focus 在最严重的 tile，transparent 主导时降权
+   ```
+   a[i,j] = softmax(s[i,j] / T)  # T=0.25
+   S_dom_raw = Σ_{i,j} a[i,j] · s[i,j]
+   r_tr = g1 / (g1 + g2 + g3)  # transparent ratio
+   S_dom = (1 - η·r_tr) · S_dom_raw  # η=0.9
+   ```
+
+**最终融合**：
+```
+S_agg = α·S_op + β·S_sp + γ·S_dom  # α=0.6, β=0.3, γ=0.1
+```
+
+### 2.3 损失函数
+
+```
+L_total = L_tile + λ·L_global + μ·L_cons
+
+L_tile = L1(G_hat, G_gt)
+L_global = L1(S_hat, S_gt)
+L_cons = L1(S_hat, S_agg)
+```
+
+### 2.4 已完成的验证结果
+
+| 指标 | 数值 | 含义 |
+|------|------|------|
+| `ρ_sagg_gt` | 0.9932 | Aggregator 从 Tile 聚合的 S 与真值高度一致 |
+| `ρ_shat_gt` | 0.9936 | Global Head 预测与真值高度一致 |
+| `ρ_shat_sagg` | 0.9982 | Global Head 与 Aggregator 输出高度一致 |
+| `gap_mae` | 0.0249 | S_hat 与 S_agg 的平均差距很小 |
+| Tile MAE | 0.0396 | Tile 级预测的平均绝对误差 |
+| Global MAE | 0.0187 | Global 级预测的平均绝对误差 |
+
+### 2.5 消融实验：一致性损失的作用
+
+| 模型 | μ_cons | Gap MAE | ρ(S_hat, S_agg) | ρ(S_hat, S_gt) |
+|------|--------|---------|-----------------|----------------|
+| 模型 A | 0.1 | 0.0249 | 0.9982 | 0.9936 |
+| 模型 B | 0.0 | 0.0244 | 0.9976 | 0.9929 |
+
+**结论**：一致性损失的作用有限，Tile 监督已经强烈约束了特征学习，使得 Global Head 和 Aggregator 自然地学习到了相同的映射。
+
+### 2.6 创新点阐述
+
+**为什么 Aggregator 是创新点？**
+
+1. **可解释的物理约束**: Aggregator 是 Severity Score 物理定义的可微分实现，提供了从局部到全局的可解释路径
+
+2. **双路预测的一致性验证**: Global Head（监督学习）和 S_agg（物理聚合）两条路径来源不同但高度一致，验证了模型的可信度
+
+3. **支持弱监督/迁移学习**: 当只有弱标注数据时（无 tile 标签），Global Head 仍能准确预测，因为它在强标注数据上学习到了正确的物理映射
+
+**论文叙事角度**：
+- Severity Score 不是任意定义的 loss target，而是有物理含义的量
+- ρ_sagg_gt = 0.9932 说明这个物理定义与人工标注一致
+- Aggregator 提供了"跨场景的接口"：强标注数据训练的物理定义可以迁移到弱标注场景
+
+---
+
+## Step 3 Stable Diffusion 合成增强（强标注生成）（重点扩写，作为与 Severity 并列的主线工作）
+
+大纲原始定义：
+
+* 静态合成输入 ((I_{clean})) + mask ((M)) + 类别 ((c\in{1,2,3}))，输出合成图与强标注，并可控混合 (I'=\alpha I_{sd}+(1-\alpha)I_{clean})。
+* 时序合成：mask 演化（warp+扰动）、背景稳定性（SSIM），输出序列强标注样本。
+
+在此基础上补全“可实现、可消融、可量化”的细化设计：
+
+### 3.1 静态合成（SD_strong）：从“可用”到“可控、可解释”
+
+#### 3.1.1 合成目标与强标注闭环
+
+对每张 clean 图像 (I_{clean}) 生成：
+
+* 合成图像 (I')
+* 像素级 mask (Y'(\mathbf{p})\in{0,1,2,3})（(0) 为 clean）
+* 由 (Y') 计算 (\mathbf{G}', s', S', L')（与真实域标签完全同口径）
+
+#### 3.1.2 mask 构造与参数化（保证“可控”）
+
+建议把 mask 的控制拆成三层参数（用于消融与定量）：
+
+1. **类别**：(c\in{1,2,3})
+2. **覆盖率**：由目标面积比例 (\pi=\frac{|{\mathbf{p}:Y'(\mathbf{p})\neq 0}|}{|\Omega|}) 控制
+3. **形态**：不同类别的典型纹理/边缘形态（如透明雾状 vs 泥点块状 vs 水滴边缘）
+
+mask 来源可组合：
+
+* 从 WoodScape 的 `gtLabels` 抽取真实 mask 作为“形态库”
+* 程序化生成（泊松点过程/椭圆/条纹）作为补充扩展
+
+#### 3.1.3 SD 生成方式（保证“背景不被改写”）
+
+目标是“只在 mask 区域生成脏污外观”，非 mask 区域保持与 (I_{clean}) 一致：
+
+* 采用 inpainting/局部生成策略：仅对 mask 区域进行生成
+* 强制背景一致性约束：对非 mask 区域做像素一致或 SSIM 约束（与 3.2 时序一致）
+
+#### 3.1.4 合成强度连续控制（与 Severity 建立可解释关系）
+
+通过以下旋钮实现从轻到重的连续控制，并在输出侧用 (S') 量化记录：
+
+* (\pi)（覆盖率）
+* mask 内纹理强度（噪声幅值/对比度/透明度）
+* 混合系数 (\alpha)（合成层与原图融合比例）
+
+最终使得合成样本能覆盖 (S') 的分布区间，并可按 (S') 做分层采样/配比（服务于 Step 5 混合训练与泛化）。
+
+---
+
+### 3.2 时序合成（SD_seq）：生成“脏污随时间演化”的序列强标注（重点补强）
+
+#### 3.2.1 序列定义
+
+生成长度为 (T) 的序列：
+[
+{(I'_t, Y'_t, \mathbf{G}'_t, S'*t)}*{t=1}^{T}
+]
+要求：
+
+* mask 的演化连续（形态与位置变化平滑）
+* 背景在非 mask 区域尽量稳定（避免把“脏污变化”混入“场景变化”）
+
+#### 3.2.2 mask 演化规则（从大纲补全为可实现约束）
+
+* warp：对 (Y'*{t}) 做仿射/薄板样条/小形变得到候选 (Y'*{t+1})
+* 扰动：边缘随机游走、局部增厚/减薄、点滴增殖/蒸发
+* IoU 平滑：约束 (\text{IoU}(Y'*t, Y'*{t+1})) 落在预设区间（避免跳变）
+
+#### 3.2.3 背景稳定性约束（可量化）
+
+在非 mask 区域 (\Omega\setminus M_t) 上约束：
+
+* (\text{SSIM}(I'*t, I*{clean})) 或 (\text{SSIM}(I'*t, I'*{t-1})) 高于阈值（用于筛掉“背景被 SD 改写”的样本）
+
+#### 3.2.4 时序 embedding 的数据接口（为 Step 5 预留）
+
+为每个序列样本记录：
+
+* (\Delta t)（合成的时间间隔）
+* 事件类型（累积/消退/突变）
+* (\Delta S'*t = S'*{t+1}-S'_t)
+
+这些 meta 可直接用于后续“时序损失/embedding”设计，使时序模块不是纯“后处理平滑”，而是对“脏污变化动力学”有监督。
+
+---
+
+## Step 4 合成数据对齐与筛选（CycleGAN + 任务一致性）（扩写为可落地闭环）
+
+大纲原始：CycleGAN 域 A 为 clean，域 B 为 `Train_Real`；任务一致性 (q_T) 基于 tile；筛选/加权按 (q_D\cdot q_T)。
+
+补全关键点（强调：此处是 SD 泛化提升的核心杠杆之一）：
+
+* 域对齐对象：优先对齐“成像风格/噪声/色调”，不改变 soiling mask 的几何结构
+* (q_T) 依赖一个在 `Train_Real` 上训练过的 tile predictor，衡量合成样本在任务空间是否合理：
+  [
+  d=\sum_{i,j}\left|\hat{\mathbf{G}}*{i,j}-\mathbf{G}^**{i,j}\right|_1,\quad
+  q_T=\exp(-\lambda d)
+  ]
+
+
+输出：
+
+* `Train_Syn_Filtered`（硬筛选 top (p%)）或带权重的训练清单（软加权）
+
+---
+
+## Step 5 混合训练（Real + Syn）与时序鲁棒（重点扩写，呼应你的主线诉求）
+
+### 5.0 核心洞察：时序建模的物理基础
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                                                                     │
+│  脏污物理特性：相对镜头固定                                           │
+│  场景物理特性：随车辆移动而变化                                         │
+│                                                                     │
+│  → 通过"固定 vs 变化"的时序对比，可以更准确地识别脏污                      │
+│                                                                     │
+│  可行性：即使 WoodScape 缺少连续帧，时序模块仍然可行                      │
+│  - 时序监督主要来自 SD_seq 的强标注序列                                  │
+│  - WoodScape 的强标注静态测试作为"单帧精度不退化"的约束性证据                │
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+### 5.1 三阶段训练策略（兼顾强标注精度与时序能力）
+
+#### Stage 1：单帧强标注预训练（已完成）
+
+**目标**: 建立 WoodScape 强标注基线
+
+**数据**:
+- 训练: `Train_Real` (3200 samples)
+- 验证: `Val_Real` (800 samples)
+
+**输出**:
+- 预训练 backbone (ResNet18)
+- Tile Head: Ĝ [B,4,8,8]
+- Global Head: Ŝ [B,1]
+- Aggregator: S_agg [B,1]
+
+**性能基准**:
+- Tile MAE: 0.0396
+- Global MAE: 0.0187
+- ρ(S_hat, S_gt): 0.9936
+
+#### Stage 2：引入时序编码模块 + SD_seq 训练
+
+**目标**: 学习"严重度变化率"与序列一致性
+
+**数据**: SD_seq 合成序列
+```
+{I'_t, Y'_t, G'_t, S'_t}_{t=1}^{T}
+```
+
+**时序模块设计**:
+
+| 方案 | 架构 | 优点 | 缺点 |
+|------|------|------|------|
+| LSTM/GRU | 特征 → LSTM → 输出 | 适合长时序 | 参数较多 |
+| Temporal Conv | 特征 → 1D Conv → 输出 | 轻量高效 | 只能捕捉短时序 |
+| Temporal Attn | 特征 → Attention → 输出 | 可解释性强 | 计算成本较高 |
+
+**时序损失**:
+```
+L_temp = (1/B(T-1)) · Σ |(Ŝ_{t+1} - Ŝ_t) - (S'_{t+1} - S'_t)|
+```
+
+该损失把模型的"严重度变化率"直接对齐到合成序列的真实变化率，从而学习"脏污动力学"，而不是仅做平滑。
+
+#### Stage 3：混合微调（避免域偏移）
+
+**问题**: 仅在合成序列上训练会导致"合成分布偏置"
+
+**解决**: 将训练数据按批次混合
+```
+Batch = Batch_Real ∪ Batch_SD_seq
+
+损失:
+- Batch_Real: L_tile + λ·L_global
+- Batch_SD_seq: L_tile + λ·L_global + μ·L_temp
+```
+
+**效果**: 既保持 WoodScape 强标注能力，又让时序模块获得有效训练信号
+
+### 5.2 时序模块的技术实现路径
+
+#### 方案 1：光流辅助（简单直接）
+
+```
+Frame_t-1 ──→ Optical Flow ──→ 運動熱力圖
+                  ↓
+Frame_t ─────────→ 結合運動信息 ──→ 臟汙預測
+```
+
+**逻辑**: 道路场景光流值大（车辆相对运动），脏污区域光流值接近0（固定在镜头上）
+
+#### 方案 2：时序特征编码（更鲁棒）
+
+```
+[Frame_t-T, ..., Frame_t]
+       ↓
+Shared Backbone (ResNet18)
+       ↓
+[Feature_t-T, ..., Feature_t]
+       ↓
+時序模塊 (LSTM / Attention)
+       ↓
+時序感知的特徵 → 臟汙預測
+```
+
+#### 方案 3：时序一致性损失（无需改架构）
+
+保持当前 Baseline 架构不变，新增损失项：
+```
+L_temporal = Σ ||G_hat_t - G_hat_{t-1}||² (在非運動區域)
+           或
+L_temporal = Σ (S_t - S_{t-1})² (全局嚴重度變化平緩)
+```
+
+### 5.3 SD 增强带来的泛化提升（主线之一）
+
+把混合训练拆成可消融的三档，对应 Step 6 的合成增强消融项：
+
+* Real only
+* Real + Syn（无筛选）
+* Real + Syn（筛选/加权）
+
+**分布对齐策略**（避免合成数据把训练分布带偏）：
+
+* 按 (L) 或 (S) 分层采样，使合成样本的 (S') 分布与 `Train_Real` 的 (S) 分布相近
+* 按类别 ({1,2,3}) 做均衡或按真实频率配比
+
+### 5.4 测试集安排与评测口径
+
+#### 5.4.1 WoodScape 强标注测试集 `Test_Real`
+
+**定位**: 单帧强标注基准测试集，继续作为主表结果之一
+
+**指标**:
+- Tile MAE
+- Ŝ 的 MAE/RMSE
+- Level Accuracy
+
+**时序模型推理**: 采用"单帧模式"
+- 输入序列长度设为 1
+- 或用同一帧复制构造长度为 K 的序列
+- **作用**: 验证引入时序编码模块后，静态强标注能力保持稳定
+
+#### 5.4.2 外部弱标注测试集 `Test_Ext`
+
+**定位**: 验证时序模块在真实视频场景的泛化能力
+
+**指标**:
+- ρ(Ŝ, ext_level): 秩相关（预期提升）
+- ρ(Ŝ, 1-Q): 车道线 probe 相关性（预期提升）
+- 失败事件 AUC（预期改善）
+- 同一视频内 Ŝ 波动幅度（预期降低）
+
+**时序模块的收益**:
+- 利用"相对静止脏污与相对变化背景"的先验
+- 提升预测稳定性
+
+#### 5.4.3 合成域测试集 `Test_Syn`（辅助）
+
+**定位**: 验证 SD_seq 的可控性与时序学习是否按预期工作
+
+**指标**:
+- 背景一致性（SSIM）
+- Mask 演化平滑度（IoU）
+- 输出变化率对齐度
+
+**用途**: 辅助实验或附录，不建议与 `Test_Real` 合并
+
+### 5.5 关键注意事项
+
+#### 5.5.1 数据隔离
+
+* SD_seq 的 clean 底图与外部测试视频来源分离
+* 避免训练侧间接接触测试侧分布信息
+* CycleGAN 域 B 不包含 `Test_Real`
+
+#### 5.5.2 模型结构兼容单帧与序列
+
+时序编码模块设计为"可选启用"的附加分支：
+- 单帧输入时退化为普通单帧模型
+- 保证 WoodScape 静态测试的可比性
+
+#### 5.5.3 贡献表达（论文叙事）
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                                                                     │
+│  貢獻 1-2: 靜態強監督基線                                              │
+│  - Severity Score 物理定義                                            │
+│  - Aggregator 可解釋聚合                                             │
+│  - WoodScape 強標註精度                                               │
+│                                                                     │
+│  貢獻 3: 時序魯棒建模                                                 │
+│  - 利用臟汙相對鏡頭固定的物理特性                                       │
+│  - SD_seq 提供可控的時序強監督                                         │
+│  - 提升真實視頻場景的魯棒性                                            │
+│                                                                     │
+│  貢獻 4-5: SD 數據增強閉環                                            │
+│  - 靜態合成 + 時序合成                                                │
+│  - 域對齐與篩選                                                      │
+│                                                                     │
+│  三者共同支撐"時序魯棒建模"這一並列貢獻點                                 │
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+**完整叙事链**:
+1. WoodScape 强标注提供"静态强监督基线"
+2. SD_seq 提供"可控的时序强监督"
+3. 外部视频提供"真实视频场景检验"
+4. 三者共同支撑"时序鲁棒建模"这一并列贡献点
+
+---
+
+## Step 6 消融实验矩阵（补充两项以体现 SD 与时序工作量）
+
+原大纲 (1\sim7) 保持，新增两项以覆盖你强调的创新点：
+8. **SD 静态合成可控因素消融**：仅覆盖率控制 vs 覆盖率+纹理强度 vs 再加 (\alpha) 混合
+9. **时序模块消融**：无时序（单帧） vs 时序 embedding vs 时序 embedding+(\mathcal{L}_{temp})
+
+### 6.1 Type 1: 标签定义消融 (Severity Score 组件验证)
+
+**目的**: 验证 Severity Score 各组件的贡献，确定"预测目标"的必要性与收益
+
+**实验变体**:
+| GT_S 定义 | 公式 | 预期作用 |
+|----------|------|---------|
+| s (baseline) | `s = 1 - clean_ratio` | 简单基线 |
+| S_op_only | `S_op = Σ(w_c · p_c)` | 仅透明度加权 |
+| S_op_sp | `0.7·S_op + 0.3·S_sp` | 加入空间重要性 |
+| S_full | `0.6·S_op + 0.3·S_sp + 0.1·S_dom(η=0.9)` | 完整定义 |
+| S_full_eta00 | `0.6·S_op + 0.3·S_sp + 0.1·S_dom(η=0)` | 无透明度折扣 |
+
+**实现**: 标签已保存所有变体到 `.npz`，通过 `--global_target` 参数选择
+**脚本**: `scripts/16_run_ablation_experiments.sh`, `scripts/17_evaluate_ablation_results.py`
+
+### 6.2 Type 2: 模型结构消融 (Aggregator + L_cons 验证)
+
+**目的**: 验证 Aggregator 和一致性损失的作用
+
+**实验变体** (GT_S 固定为 S_full):
+| 模型结构 | Aggregator | μ_cons | 说明 |
+|---------|-----------|--------|------|
+| Baseline | Yes | 0.1 | 完整模型 |
+| w/o Aggregator | No (简单平均) | 0.1 | 不使用可微聚合 |
+| w/o L_cons | Yes | 0.0 | 无一致性约束 |
+
+**对比指标**: Tile MAE, Global MAE, Gap MAE, ρ_shat_gt, ρ_shat_sagg
+
+### 6.3 附录可视化 (讨论部分支撑材料)
+
+**实验后期补充**，用于论文附录：
+
+1. **分桶分布可分性图**:
+   - 各变体在不同严重度分桶 (L=0/1/2/3) 上的 S_hat 分布
+   - 箱线图展示各分桶的分离度
+   - 用以支撑"复杂定义提升可分性"的讨论
+
+2. **失败案例可视化**:
+   - 收集高误差样本 (Top 50 by \|S_hat - S_gt\|)
+   - 可视化原图 + GT mask + 预测结果
+   - 分析失败模式 (e.g., 透明泥点误判、边缘脏漏检)
+
+3. **各变体在不同分桶的 MAE/RMSE 对比表**:
+   - 按 L 分组统计各指标
+   - 展示不同定义在各难度水平的性能差异
+
+---
+
+## Step 7 下游车道线 probe 功能验证（保持）
+
+* 车道质量指标：
+  [
+  Q=\frac{1}{HW}\sum_{x,y}\mathbb{1}[P_{\text{lane}}(x,y)>t]
+  ]
+* 证明 (\hat{S}) 更能解释功能退化：
+  [
+  \rho=\text{Spearman}(\hat{S}, 1-Q)
+  ]
+  并比较不同模型/训练策略的 (\rho) 与失败事件 AUC。
+
+---
+
+## Step 8 复现与产物（补全到你已落地的数据工程）
+
+除原大纲产物外，新增你已完成的数据预处理产物（作为论文可复现实验的重要支撑）：
+
+### 8.1 数据与清单文件
+
+* `manifest_woodscape.csv`, `splits/*.csv`
+* `labels_tile/*.npz`（含 (s,S,L) 与诊断项）
+* `labels_index.csv`, `labels_index_rebinned.csv`, `rebinned_thresholds.json`
+* **clean 域**：
+
+  * `dataset/my_clean_video_raw/`
+  * `dataset/my_clean_frames/`（中间产物）
+  * `dataset/my_clean_frames_4by3_640x480/`（最终 clean 输入）
+  * `dataset/my_clean_manifests/` 与 `manifest_clean.csv`
+* **外部 ext 域**：
+
+  * `dataset/my_external_test/images/occlusion_{a..e}/`
+  * `dataset/my_external_test/test_ext.csv`（外部评测清单，global 为主）
+* `lane_probe_scores.csv`
+
+### 8.2 模型与报告（保持）
+
+* Model 权重与训练日志
+* 消融与下游验证报告
+
+---

@@ -1,0 +1,13 @@
+File ID: 0227_FV
+Original Caption: noticeable opaque heavy stains, on camera lens, out of focus foreground, subtle glare, background visible
+Fixed Caption: noticeable semi-transparent dirt smudge, on camera lens, out of focus foreground, subtle glare, background visible
+
+Class Ratios:
+  C1 (transparent): 36.2%
+  C2 (semi-transparent): 63.6%
+  C3 (opaque): 0.0%
+
+Original Dominant Class: C3 (opaque)
+Fixed Dominant Class: C2 (semi-transparent)
+
+Severity: noticeable (S_full=0.531)

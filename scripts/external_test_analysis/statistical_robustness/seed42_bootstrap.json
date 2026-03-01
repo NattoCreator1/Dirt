@@ -1,0 +1,12 @@
+{
+  "model_name": "Baseline_Seed42",
+  "n_images": 50383,
+  "n_clusters": 505,
+  "avg_images_per_cluster": 99.76831683168317,
+  "point_estimate": 0.7145258784294128,
+  "ci_lower": 0.6377601057291031,
+  "ci_upper": 0.7404763162136078,
+  "se": 0.02617683058375991,
+  "ci_width": 0.10271621048450463,
+  "relative_width": 14.375436017836524
+}

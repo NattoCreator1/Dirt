@@ -1,0 +1,23 @@
+{
+  "config": {
+    "inpainting_model": "/home/yf/models/sd2_inpaint",
+    "lora_path": "/home/yf/soiling_project/sd_scripts/lora/output/20260217_182102_lora_v1/checkpoint-3000",
+    "checkpoint_step": 3000,
+    "clean_image_dir": "test_input/clean_images",
+    "mask_dir": "test_input/masks",
+    "output_dir": "test_output",
+    "strength": 0.35,
+    "guidance_scale": 5.5,
+    "num_inference_steps": 30,
+    "lora_scale": 1.0,
+    "soiling_class": "all",
+    "severity": "both",
+    "num_samples": 1,
+    "seed": 42,
+    "save_spill_viz": true,
+    "compute_qc_metrics": true
+  },
+  "lora_path": "/home/yf/soiling_project/sd_scripts/lora/output/20260217_182102_lora_v1/checkpoint-3000",
+  "timestamp": "20260218_153355",
+  "results": []
+}

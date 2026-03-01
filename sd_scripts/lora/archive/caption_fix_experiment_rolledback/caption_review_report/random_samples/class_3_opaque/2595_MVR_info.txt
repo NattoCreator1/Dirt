@@ -1,0 +1,13 @@
+File ID: 2595_MVR
+Original Caption: severe opaque heavy stains, on camera lens, out of focus foreground, subtle glare, background visible
+Fixed Caption: severe opaque heavy stains, on camera lens, out of focus foreground, subtle glare, background visible
+
+Class Ratios:
+  C1 (transparent): 0.0%
+  C2 (semi-transparent): 44.4%
+  C3 (opaque): 55.6%
+
+Original Dominant Class: C3 (opaque)
+Fixed Dominant Class: C3 (opaque)
+
+Severity: severe (S_full=0.872)

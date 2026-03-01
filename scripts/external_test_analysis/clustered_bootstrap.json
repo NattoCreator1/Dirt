@@ -1,0 +1,24 @@
+{
+  "model_name": "Baseline",
+  "n_images": 50383,
+  "n_clusters": 505,
+  "avg_images_per_cluster": 99.76831683168317,
+  "point_estimate": 0.7446343302726746,
+  "ci_lower": 0.6739029109477996,
+  "ci_upper": 0.7662386551499367,
+  "se": 0.023254361557984285,
+  "ci_width": 0.09233574420213708,
+  "relative_width": 12.40014601103941,
+  "paired_analysis": {
+    "model2_name": "A+-only",
+    "model2_rho": 0.6478168368339539,
+    "delta_rho": -0.0968174934387207,
+    "model2_ci_lower": 0.5747834905982018,
+    "model2_ci_upper": 0.6845761194825173,
+    "delta_ci_lower": -0.13671943545341492,
+    "delta_ci_upper": -0.05425643920898438,
+    "delta_se": 0.021502681845099257,
+    "is_significant": true,
+    "conclusion": "A+-only \u663e\u8457\u5dee\u4e8e Baseline"
+  }
+}

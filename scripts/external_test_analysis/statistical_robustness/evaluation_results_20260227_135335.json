@@ -1,0 +1,70 @@
+{
+  "multi_seed": {
+    "experiment_type": "multi_seed",
+    "n_seeds": 3,
+    "seeds": [
+      42,
+      123,
+      456
+    ],
+    "results": [
+      {
+        "seed": 123,
+        "run_name": "baseline_seed123_S_20260226_235326",
+        "ckpt_path": "baseline/runs/baseline_seed123_S_20260226_235326/ckpt_last.pth",
+        "pred_csv": "scripts/external_test_analysis/multi_seed/seed123_test_ext.csv",
+        "n_samples": 50383,
+        "n_clusters": 505,
+        "n_images": 50383,
+        "rho_point": 0.7421019673347473,
+        "ci_lower": 0.6935129433870315,
+        "ci_upper": 0.7731525123119354,
+        "se": 0.020425120374630363,
+        "ci_width": 0.07963956892490387,
+        "relative_width": 10.731620778601178,
+        "compression_ratio": 0.081242225,
+        "level_means": {
+          "5.0": 0.8701976,
+          "4.0": 0.88388315,
+          "3.0": 0.76054114,
+          "2.0": 0.70004097,
+          "1.0": 0.5452287
+        }
+      },
+      {
+        "seed": 456,
+        "run_name": "baseline_seed456_S_20260227_003626",
+        "ckpt_path": "baseline/runs/baseline_seed456_S_20260227_003626/ckpt_last.pth",
+        "pred_csv": "scripts/external_test_analysis/multi_seed/seed456_test_ext.csv",
+        "n_samples": 50383,
+        "n_clusters": 505,
+        "n_images": 50383,
+        "rho_point": 0.7249419093132019,
+        "ci_lower": 0.6673787206411361,
+        "ci_upper": 0.7576551541686058,
+        "se": 0.023858481386427127,
+        "ci_width": 0.09027643352746972,
+        "relative_width": 12.45291965710689,
+        "compression_ratio": 0.06665152624999998,
+        "level_means": {
+          "5.0": 0.85555743,
+          "4.0": 0.8474425,
+          "3.0": 0.75556654,
+          "2.0": 0.68762542,
+          "1.0": 0.588951325
+        }
+      }
+    ],
+    "statistics": {
+      "rho_mean": 0.7335219383239746,
+      "rho_std": 0.01213399339258937,
+      "rho_min": 0.7249419093132019,
+      "rho_max": 0.7421019673347473,
+      "ci_lower_mean": 0.6804458320140838,
+      "ci_upper_mean": 0.7654038332402706,
+      "ci_width_mean": 0.0849580012261868,
+      "compression_mean": 0.07394687562499999,
+      "compression_std": 0.010317182028375097
+    }
+  }
+}

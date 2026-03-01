@@ -1,0 +1,13 @@
+{
+  "n_samples": 1260,
+  "weight_mean": 1.6952380952380952,
+  "weight_std": 2.7221624377213445,
+  "weight_min": 0.8076256499133448,
+  "weight_max": 50.0,
+  "s_mean": 0.2866079496544978,
+  "s_std": 0.08602315419409183,
+  "n_bins": 10,
+  "real_ratio": 0.8,
+  "min_weight": 0.1,
+  "max_weight": 50.0
+}

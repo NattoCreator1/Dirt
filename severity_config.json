@@ -1,0 +1,25 @@
+{
+  "version": "v1.0_wgap_alpha50",
+  "description": "Converged Severity Score for SD enhancement experiments",
+  "reference": "docs/experiments/2025-02-09_two_weight_systems_validation.md",
+  "creation_date": "2025-02-09",
+  "class_weights": {
+    "clean": 0.0,
+    "transparent": 0.15,
+    "semi_transparent": 0.5,
+    "opaque": 1.0,
+    "_comment": "w_gap_strong: 扩大opaque与其它类的间隔"
+  },
+  "fusion_coeffs": {
+    "alpha": 0.5,
+    "beta": 0.4,
+    "gamma": 0.1,
+    "_comment": "alpha50: 降低α，提高β，给予Spatial更多权重"
+  },
+  "eta_trans": 0.9,
+  "spatial": {
+    "mode": "gaussian",
+    "sigma": 0.5
+  },
+  "formula": "S_full = alpha * S_op + beta * S_sp + gamma * S_dom"
+}

@@ -1,0 +1,134 @@
+{
+  "kfold": {
+    "experiment_type": "kfold",
+    "n_folds": 5,
+    "results": [
+      {
+        "fold": 1,
+        "run_name": "baseline_k5_fold1_S_20260227_140408",
+        "ckpt_path": "baseline/runs/baseline_k5_fold1_S_20260227_140408/ckpt_last.pth",
+        "pred_csv": "scripts/external_test_analysis/kfold/kfold5_fold1_test_ext.csv",
+        "n_samples": 50383,
+        "n_clusters": 505,
+        "n_images": 50383,
+        "rho_point": 0.7122645378112793,
+        "ci_lower": 0.6598321169614791,
+        "ci_upper": 0.7463285654783248,
+        "se": 0.02222158411261168,
+        "ci_width": 0.08649644851684568,
+        "relative_width": 12.14386564613212,
+        "compression_ratio": 0.07925999,
+        "level_means": {
+          "5.0": 0.85497993,
+          "4.0": 0.90929045,
+          "3.0": 0.7503645299999999,
+          "2.0": 0.6993121,
+          "1.0": 0.53793997
+        }
+      },
+      {
+        "fold": 2,
+        "run_name": "baseline_k5_fold2_S_20260227_144736",
+        "ckpt_path": "baseline/runs/baseline_k5_fold2_S_20260227_144736/ckpt_last.pth",
+        "pred_csv": "scripts/external_test_analysis/kfold/kfold5_fold2_test_ext.csv",
+        "n_samples": 50383,
+        "n_clusters": 505,
+        "n_images": 50383,
+        "rho_point": 0.7088711261749268,
+        "ci_lower": 0.6546096578240395,
+        "ci_upper": 0.7462082073092461,
+        "se": 0.023985133995610135,
+        "ci_width": 0.09159854948520663,
+        "relative_width": 12.921749257791468,
+        "compression_ratio": 0.08865994625000001,
+        "level_means": {
+          "5.0": 0.897434485,
+          "4.0": 0.890428885,
+          "3.0": 0.7595881,
+          "2.0": 0.7007137999999999,
+          "1.0": 0.5427947
+        }
+      },
+      {
+        "fold": 3,
+        "run_name": "baseline_k5_fold3_S_20260227_153036",
+        "ckpt_path": "baseline/runs/baseline_k5_fold3_S_20260227_153036/ckpt_last.pth",
+        "pred_csv": "scripts/external_test_analysis/kfold/kfold5_fold3_test_ext.csv",
+        "n_samples": 50383,
+        "n_clusters": 505,
+        "n_images": 50383,
+        "rho_point": 0.7281509637832642,
+        "ci_lower": 0.6769129797816277,
+        "ci_upper": 0.7652836844325066,
+        "se": 0.021491334014929305,
+        "ci_width": 0.08837070465087893,
+        "relative_width": 12.136316374798163,
+        "compression_ratio": 0.060858195000000004,
+        "level_means": {
+          "5.0": 0.85273602,
+          "4.0": 0.8896427,
+          "3.0": 0.769626725,
+          "2.0": 0.73118618,
+          "1.0": 0.60930324
+        }
+      },
+      {
+        "fold": 4,
+        "run_name": "baseline_k5_fold4_S_20260227_161354",
+        "ckpt_path": "baseline/runs/baseline_k5_fold4_S_20260227_161354/ckpt_last.pth",
+        "pred_csv": "scripts/external_test_analysis/kfold/kfold5_fold4_test_ext.csv",
+        "n_samples": 50383,
+        "n_clusters": 505,
+        "n_images": 50383,
+        "rho_point": 0.7610805630683899,
+        "ci_lower": 0.7181220516562462,
+        "ci_upper": 0.7915219649672508,
+        "se": 0.018429062211568575,
+        "ci_width": 0.0733999133110046,
+        "relative_width": 9.644171310207138,
+        "compression_ratio": 0.08024050249999998,
+        "level_means": {
+          "5.0": 0.90479004,
+          "4.0": 0.934523625,
+          "3.0": 0.8203493,
+          "2.0": 0.7654070550000001,
+          "1.0": 0.58382803
+        }
+      },
+      {
+        "fold": 5,
+        "run_name": "baseline_k5_fold5_S_20260227_165706",
+        "ckpt_path": "baseline/runs/baseline_k5_fold5_S_20260227_165706/ckpt_last.pth",
+        "pred_csv": "scripts/external_test_analysis/kfold/kfold5_fold5_test_ext.csv",
+        "n_samples": 50383,
+        "n_clusters": 505,
+        "n_images": 50383,
+        "rho_point": 0.7542586922645569,
+        "ci_lower": 0.7112302631139755,
+        "ci_upper": 0.783163683116436,
+        "se": 0.018745875289859305,
+        "ci_width": 0.0719334200024605,
+        "relative_width": 9.53696931042192,
+        "compression_ratio": 0.07777158749999999,
+        "level_means": {
+          "5.0": 0.9026795,
+          "4.0": 0.93993853,
+          "3.0": 0.84631294,
+          "2.0": 0.79654192,
+          "1.0": 0.59159315
+        }
+      }
+    ],
+    "statistics": {
+      "rho_mean": 0.7329251766204834,
+      "rho_std": 0.023854229828395888,
+      "rho_min": 0.7088711261749268,
+      "rho_max": 0.7610805630683899,
+      "ci_lower_mean": 0.6841414138674736,
+      "ci_upper_mean": 0.7665012210607529,
+      "ci_width_mean": 0.08235980719327926,
+      "compression_mean": 0.07735804425,
+      "compression_std": 0.010149815211481516
+    }
+  }
+}

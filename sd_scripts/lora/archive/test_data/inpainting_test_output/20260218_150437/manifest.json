@@ -1,0 +1,60 @@
+{
+  "config": {
+    "inpainting_model": "/home/yf/models/sd2_inpaint",
+    "lora_path": "/home/yf/soiling_project/sd_scripts/lora/output/20260217_182102_lora_v1/checkpoint-3000",
+    "checkpoint_step": 3000,
+    "clean_image_dir": "/home/yf/soiling_project/sd_scripts/lora/test_data/clean_images",
+    "mask_dir": "/home/yf/soiling_project/sd_scripts/lora/test_data/masks",
+    "output_dir": "./inpainting_test_output",
+    "strength": 0.2,
+    "guidance_scale": 5.5,
+    "num_inference_steps": 30,
+    "lora_scale": 1.0,
+    "soiling_class": "auto",
+    "severity": "noticeable",
+    "num_samples": 1,
+    "seed": null,
+    "save_spill_viz": true,
+    "compute_qc_metrics": true
+  },
+  "lora_path": "/home/yf/soiling_project/sd_scripts/lora/output/20260217_182102_lora_v1/checkpoint-3000",
+  "timestamp": "20260218_150437",
+  "results": [
+    {
+      "clean_image": "test_001.jpg",
+      "mask": "test_001.png",
+      "class": "C3",
+      "severity": "noticeable",
+      "output": "0000_test_001_C3_noticeable.png",
+      "prompt": "noticeable opaque heavy stains, on camera lens, out of focus foreground, subtle glare, background visible",
+      "qc": {
+        "spill_rate": 0.8245911729643857,
+        "mask_coverage": 0.21772384643554688
+      }
+    },
+    {
+      "clean_image": "test_002.jpg",
+      "mask": "test_002.png",
+      "class": "C1",
+      "severity": "noticeable",
+      "output": "0001_test_002_C1_noticeable.png",
+      "prompt": "noticeable transparent soiling layer, on camera lens, out of focus foreground, subtle glare, background visible",
+      "qc": {
+        "spill_rate": 0.4428579379658208,
+        "mask_coverage": 0.404205322265625
+      }
+    },
+    {
+      "clean_image": "test_003.jpg",
+      "mask": "test_003.png",
+      "class": "C1",
+      "severity": "noticeable",
+      "output": "0002_test_003_C1_noticeable.png",
+      "prompt": "noticeable transparent soiling layer, on camera lens, out of focus foreground, subtle glare, background visible",
+      "qc": {
+        "spill_rate": 0.8156453157548117,
+        "mask_coverage": 0.14447402954101562
+      }
+    }
+  ]
+}

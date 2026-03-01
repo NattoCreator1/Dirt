@@ -1,0 +1,19 @@
+{
+  "model1_name": "Baseline",
+  "model2_name": "Tile-only",
+  "n_samples": 50458,
+  "n_bootstrap": 1000,
+  "confidence_level": 0.95,
+  "model1_rho_point": 0.7176870107650757,
+  "model2_rho_point": 0.6775995492935181,
+  "delta_rho_point": -0.04008746147155762,
+  "model1_ci_lower": 0.715280967950821,
+  "model1_ci_upper": 0.7247152492403984,
+  "model2_ci_lower": 0.6729948788881301,
+  "model2_ci_upper": 0.6830912575125694,
+  "delta_ci_lower": -0.04822579175233841,
+  "delta_ci_upper": -0.03537602871656418,
+  "delta_se": 0.0032122781204256276,
+  "is_significant": true,
+  "conclusion": "Tile-only \u663e\u8457\u5dee\u4e8e Baseline"
+}

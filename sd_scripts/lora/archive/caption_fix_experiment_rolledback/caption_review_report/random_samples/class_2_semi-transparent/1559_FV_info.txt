@@ -1,0 +1,13 @@
+File ID: 1559_FV
+Original Caption: noticeable transparent soiling layer, on camera lens, out of focus foreground, subtle glare, background visible
+Fixed Caption: noticeable semi-transparent dirt smudge, on camera lens, out of focus foreground, subtle glare, background visible
+
+Class Ratios:
+  C1 (transparent): 36.2%
+  C2 (semi-transparent): 63.6%
+  C3 (opaque): 0.0%
+
+Original Dominant Class: C1 (transparent)
+Fixed Dominant Class: C2 (semi-transparent)
+
+Severity: noticeable (S_full=0.531)

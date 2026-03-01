@@ -1,0 +1,20 @@
+{
+  "model1_name": "Baseline",
+  "model2_name": "SD989",
+  "n_images": 50458,
+  "n_sequences": 1,
+  "avg_images_per_sequence": 50458.0,
+  "n_bootstrap": 1000,
+  "model1_rho_point": 0.7176870107650757,
+  "model2_rho_point": 0.7097236514091492,
+  "delta_rho_point": -0.007963359355926514,
+  "model1_ci_lower": 0.7176870107650757,
+  "model1_ci_upper": 0.7176870107650757,
+  "model2_ci_lower": 0.7097236514091492,
+  "model2_ci_upper": 0.7097236514091492,
+  "delta_ci_lower": -0.007963359355926514,
+  "delta_ci_upper": -0.007963359355926514,
+  "delta_se": 0.0,
+  "is_significant": true,
+  "conclusion": "SD989 \u663e\u8457\u5dee\u4e8e Baseline"
+}

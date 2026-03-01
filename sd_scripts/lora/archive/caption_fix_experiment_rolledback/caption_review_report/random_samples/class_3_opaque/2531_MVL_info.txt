@@ -1,0 +1,13 @@
+File ID: 2531_MVL
+Original Caption: severe opaque heavy stains, on camera lens, out of focus foreground, subtle glare, background visible
+Fixed Caption: severe opaque heavy stains, on camera lens, out of focus foreground, subtle glare, background visible
+
+Class Ratios:
+  C1 (transparent): 7.3%
+  C2 (semi-transparent): 3.8%
+  C3 (opaque): 66.7%
+
+Original Dominant Class: C3 (opaque)
+Fixed Dominant Class: C3 (opaque)
+
+Severity: severe (S_full=0.676)

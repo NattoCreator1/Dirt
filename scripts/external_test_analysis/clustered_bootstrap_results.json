@@ -1,0 +1,13 @@
+{
+  "model_name": "Baseline",
+  "n_images": 50458,
+  "n_sequences": 120,
+  "avg_images_per_sequence": 420.48333333333335,
+  "point_estimate": 0.7445890307426453,
+  "ci_lower": 0.6790090322494506,
+  "ci_upper": 0.7645385295152665,
+  "se": 0.021728023844968553,
+  "ci_width": 0.08552949726581582,
+  "relative_width": 11.486805974096825,
+  "n_bootstrap": 1000
+}

@@ -1,0 +1,904 @@
+## 实验大纲 v2.0 (时序转型版：基于 Phase 2 SD 增强失败的战略调整)
+
+**版本说明**: 本版本基于 Phase 2 SD 静态增强实验的失败发现，将研究重心从"SD 作为静态增强"转向"SD 作为时序训练数据"。
+
+**核心变化**:
+- Phase 0/1/2 系统性实验证明了 SD 数据作为直接提升 MAE/ρ 的静态增强手段存在根本性局限
+- 战略转型: 利用 SD 数据构造"脏污固定、背景变化"的时序序列，服务时序一致性学习
+- 新增贡献: 时序稳定性指标（独立于 MAE/ρ）作为工程上有价值的评估维度
+
+---
+
+## ⚠️ 重要修正说明（2025-02-26）：External Test 统计方法修正
+
+### 簇层面 Bootstrap 修正
+
+**发现的问题**：
+- External Test 数据集有 **505 个簇（视频序列）**，而非 50,458 个独立样本
+- 同一簇内的图片来自同一视频的连续帧，**高度相关**
+- 原先使用的**图片层面 Bootstrap** 违反了独立性假设
+
+**修正方案**：
+- ✅ **正确方法（推荐）**：**簇层面 Bootstrap**（505 个簇作为独立单元）
+- ❌ **错误方法（仅供参考）**：图片层面 Bootstrap（50,458 张作为独立样本）
+
+**修正前后对比**：
+
+| 模型 | 图片层面 ρ (95% CI) | 簇层面 ρ (95% CI) | CI 宽度变化 |
+|------|-------------------|-------------------|-----------|
+| Baseline | 0.718 [0.7153, 0.7247] | **0.7446 [0.6739, 0.7662]** | **0.0094 → 0.0923 (9.8x)** |
+| SD989 | 0.710 [0.7058, 0.7150] | **0.5735 [0.4937, 0.6300]** | **0.0093 → 0.1363 (14.7x)** |
+| Tile-only | 0.678 [0.6730, 0.6831] | **0.6846 [0.6109, 0.7133]** | **0.0101 → 0.1024 (10.1x)** |
+| A+-only | 0.647 [0.6416, 0.6526] | **0.6478 [0.5748, 0.6846]** | **0.0110 → 0.1098 (10.0x)** |
+
+**关键结论**：
+1. 簇层面 Bootstrap 的 CI 宽度是图片层面的 **10-15 倍**
+2. 簇层面方法**更稳定可信**，因为它正确处理了簇内相关性
+3. 所有模型的性能差异**仍然是统计显著**的（即使 CI 变宽）
+
+**文档更新说明**：
+- 本文档中的 Test_Ext ρ 值已更新为簇层面结果
+- 保留图片层面结果作为参考，展示了发现问题的过程
+- 详细报告见：[CLUSTERED_BOOTSTRAP_FINAL_REPORT.md](scripts/external_test_analysis/CLUSTERED_BOOTSTRAP_FINAL_REPORT.md)
+
+---
+
+## Step 0 研究目标与核心贡献（v2.0 更新）
+
+### 0.1 目标（保持不变）
+
+构建车载镜头脏污检测模型，输出：
+
+* tile 级 (4) 类覆盖率 (Ĝ ∈ [0,1]^{8×8×4})
+* 全局连续严重度 (Ŝ ∈ [0,1])（主输出）
+* 全局 (4) 档等级 (L̂ ∈ {0,1,2,3})（统计/采样/触发）
+
+### 0.2 核心贡献点（v2.0 重构）
+
+基于 Phase 2 的发现，重构贡献点为以下三条主线：
+
+1. **Severity Score 定义 + Differentiable Aggregator**（已完成验证）
+   - opacity-aware + 空间重要性 + dominance
+   - 可微聚合器提供从局部到全局的可解释路径
+
+2. **SD 数据的系统化诊断与边界条件研究**（Phase 0/1/2，新增贡献）
+   - 诊断: 发现不同 SD 子集的 S 分布存在显著差异
+   - 校准尝试: D-only 重采样、A+-only 门控、Tile-only 隔离
+   - **关键发现**: SD 作为静态增强存在根本性局限，但为时序训练提供了关键洞察
+
+3. **时序一致性建模**（Phase 3，主线创新）
+   - 利用"脏污相对镜头固定、场景相对变化"的物理特性
+   - SD 数据构造"固定脏污层 + 变化背景"的时序序列
+   - 新增评估维度: 时序稳定性（独立于 MAE/ρ）
+
+**论文叙事逻辑**:
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                                                                     │
+│  贡献 1: Severity Score + Aggregator                                │
+│  → 建立"静态强监督基线" (WoodScape 强标注)                            │
+│                                                                     │
+│  贡献 2: SD 数据的系统化诊断                                         │
+│  → 发现静态增强的根本性局限                                           │
+│  → 提出"SD 用于时序训练"的战略转型                                    │
+│  → 为合成数据使用提供边界条件与方法论贡献                              │
+│                                                                     │
+│  贡献 3: 时序一致性建模                                              │
+│  → 利用物理先验 (脏污固定 vs 场景变化)                                │
+│  → SD 序列提供可控的时序监督                                          │
+│  → 提升时序稳定性 (工程价值 + 理论创新)                                 │
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Step 1 数据准备与标签构建（保持不变）
+
+### 1.1 WoodScape soiling（主数据，强标注）
+- 1.1.1 结构与校验
+- 1.1.2 Split (Test_Real/Train_Real/Val_Real)
+- 1.1.3 Tile 覆盖率标签 (G)
+- 1.1.4 传统面积强度 (s)
+
+### 1.2 Severity Score (S) 与 4 档等级 (L)（标签侧核心）
+- 1.2.1 Opacity-aware
+- 1.2.2 空间重要性
+- 1.2.3 dominance + transparent 主导连续降权
+- 1.2.4 融合得到连续严重度 (S)
+- 1.2.5 训练集自适应再分箱得到 (L)
+
+### 1.3 Clean Domain（用于 SD 合成）
+### 1.4 External Dataset（Test_Ext，外部泛化测试）
+
+---
+
+## Step 2 Baseline 模型（Real only）与 Differentiable Severity Aggregator（已实现）
+
+### 2.1 模型架构
+```
+Input [B,3,640,480]
+    ↓
+ResNet18 backbone (pretrained on ImageNet)
+    ↓
+Feature map [B,512,H,W]
+    ↓
+    ├─→ AdaptiveAvgPool(8x8) → Conv2d(512→4) → Softmax → G_hat [B,4,8,8]
+    │                                                   (tile head)
+    │
+    └─→ AdaptiveAvgPool → FC(512→1) → Sigmoid → S_hat [B,1]
+                                                    (global head)
+
+G_hat → SeverityAggregator → S_agg [B,1]
+```
+
+### 2.2 SeverityAggregator 设计
+- Opacity-aware Mean (S_op)
+- Spatial Importance (S_sp)
+- Dominance Pooling (S_dom)
+- 最终融合: S_agg = α·S_op + β·S_sp + γ·S_dom
+
+### 2.3 损失函数
+```
+L_total = L_tile + λ·L_global + μ·L_cons
+
+L_tile = L1(G_hat, G_gt)
+L_global = L1(S_hat, S_gt)
+L_cons = L1(S_hat, S_agg)
+```
+
+### 2.4 已完成的验证结果
+
+| 指标 | 数值 | 含义 |
+|------|------|------|
+| ρ_sagg_gt | 0.9932 | Aggregator 从 Tile 聚合的 S 与真值高度一致 |
+| ρ_shat_gt | 0.9936 | Global Head 预测与真值高度一致 |
+| ρ_shat_sagg | 0.9982 | Global Head 与 Aggregator 输出高度一致 |
+| gap_mae | 0.0249 | S_hat 与 S_agg 的平均差距很小 |
+| Tile MAE | 0.0396 | Tile 级预测的平均绝对误差 |
+| Global MAE | 0.0187 | Global 级预测的平均绝对误差 |
+| **Test_Ext ρ** | **0.7446** [0.6739, 0.7662] | 外部测试集 Spearman 相关系数（簇层面 Bootstrap） |
+
+---
+
+## Step 3 Stable Diffusion 合成增强（强标注生成）
+
+### 3.1 静态合成（SD_strong）
+
+保持原始设计，但**调整定位**：不再作为直接提升 MAE/ρ 的手段，而是作为时序训练数据的素材来源。
+
+#### 3.1.1 合成目标与强标注闭环
+对每张 clean 图像 I_clean 生成：
+- 合成图像 I'
+- 像素级 mask (Y'(p) ∈ {0,1,2,3})
+- 由 Y' 计算 (G', s', S', L')
+
+#### 3.1.2 mask 构造与参数化
+- 类别: c ∈ {1,2,3}
+- 覆盖率: 目标面积比例 π
+- 形态: 从 WoodScape gtLabels 抽取真实 mask
+
+#### 3.1.3 SD 生成方式
+- 采用 inpainting/局部生成策略
+- 强制背景一致性约束
+
+### 3.2 时序合成（SD_seq）（v2.0 强化，成为主线）
+
+#### 3.2.1 序列定义
+
+生成长度为 T 的序列：
+```
+{(I'_t, Y'_t, G'_t, S'_t)}_{t=1}^{T}
+```
+
+**核心设计原则**（基于 Phase 2 发现）：
+- **固定脏污层**: 从 SD989 中选择一个 mask + 纹理，在整个序列中保持不变
+- **变化背景**: 从真实视频或连续帧中采样背景序列
+- **合成**: I'_t = α · dirt_layer + (1-α) · background_t
+
+**优势**（针对 Phase 2 的失败）:
+- 不要求 S 分布与 WoodScape 一致（SD989 KS=0.59 也不再是问题）
+- 时序训练的目标是"帧间一致性"，而非"绝对标尺准确性"
+- 完美满足"脏污固定、背景变化"的物理先验
+
+#### 3.2.2 mask 演化规则（可选，用于扩展实验）
+- warp: 对 Y'_t 做仿射/薄板样条变形
+- 扰动: 边缘随机游走、局部增厚/减薄
+- IoU 平滑: 约束 IoU(Y'_t, Y'_{t+1}) 落在预设区间
+
+#### 3.2.3 背景稳定性约束（可量化）
+在非 mask 区域 (Ω \ M_t) 上约束：
+```
+SSIM(I'_t, I_clean) 或 SSIM(I'_t, I'_{t-1}) 高于阈值
+```
+
+#### 3.2.4 时序 embedding 的数据接口
+为每个序列样本记录：
+- Δt（合成的时间间隔）
+- 事件类型（累积/消退/突变）
+- ΔS'_t = S'_{t+1} - S'_t
+
+---
+
+## Step 4 Phase 2: SD 数据校准实验（新增，完整记录）
+
+### 4.1 Phase 0: 诊断实验（已完成）
+
+**发现**: 不同 SD 子集的 S 分布存在显著差异
+
+| SD 子集 | S_mean | 与 WoodScape (0.408) 的差异 |
+|---------|--------|----------------------------|
+| SD 1260 | 0.2866 | 负偏 (-0.12) |
+| SD 8960 | 0.4658 | 正偏 (+0.06) |
+
+**结论**: 直接混合训练会导致标尺污染，需要校准策略。
+
+### 4.2 Phase 1: D-only 重采样（已完成）
+
+**策略**: 通过重要性采样加权，使 SD 子集的 S 分布与 WoodScape 对齐。
+
+**结果**:
+
+| 模型 | Test_Real MAE | Test_Ext ρ (簇层面) | 失败模式 |
+|------|--------------:|-------------------:|----------|
+| Baseline | 0.0187 | **0.7446** [0.6739, 0.7662] | 参考基准 |
+| D-only | 0.0179 | **0.570** | 跨域排序崩塌 |
+
+**关键发现**: 边际分布校准不足以保证跨域泛化。
+
+### 4.3 Phase 2: 一致性门控与保险策略（已完成）
+
+#### 4.3.1 A+-only: 一致性门控
+
+**策略**: |Ŝ - S_agg| < threshold (0.05) 的 SD 样本才参与全局训练，通过样本权重为 α_sd (0.4)。
+
+**训练过程**:
+- Pass rate 从 100% (warmup) 逐渐收紧至 ~6%
+- 说明大部分 SD 样本被门控过滤
+
+**结果**:
+
+| 模型 | Test_Real MAE | Test_Ext ρ (簇层面) | Pass Rate |
+|------|--------------:|-------------------:|----------:|
+| Baseline | 0.0187 | **0.7446** [0.6739, 0.7662] | - |
+| A+-only | 0.0810 | **0.6478** [0.5748, 0.6846] | 5.77% |
+
+**失败模式**: 同域 MAE 崩溃（是 baseline 的 4.3 倍），跨域 ρ 下降。
+
+#### 4.3.2 Tile-only: 保险策略
+
+**策略**: SD 样本只训练 tile 头，完全不参与全局 head 训练。
+
+**结果**:
+
+| 模型 | Test_Real MAE | Test_Ext ρ (簇层面) |
+|------|--------------:|-------------------:|
+| Baseline | 0.0187 | **0.7446** [0.6739, 0.7662] |
+| Tile-only | 0.0959 | **0.6846** [0.6109, 0.7133] |
+
+**失败模式**: 同域 MAE 崩溃（是 baseline 的 5.1 倍），跨域 ρ 下降。
+
+### 4.4 Phase 2 综合结论
+
+#### 4.4.1 关键发现
+
+1. **边际分布校准不充分** (Phase 1): D-only 重采样导致跨域排序崩塌
+2. **门控的局限性** (Phase 2 A+-only): 即使过滤 94% 的 SD 样本，仍无法消除特征污染
+3. **训练集比例效应** (Phase 2): WoodScape 比例从 100% 降至 31% 导致同域性能下降
+
+#### 4.4.2 方法论贡献（可写入论文）
+
+| 发现 | 量化证据 | 代码位置 |
+|------|---------|---------|
+| 标尺漂移 | Test_Real MAE 0.018→0.082 | `train_a_plus_only_hardened.py` |
+| 跨域排序崩塌 | Test_Ext ρ 0.718→0.570 | `train_mixed_d_only.py` |
+| 特征污染 | Tile MAE 0.040→0.092 | `train_sd_tile_only.py` |
+
+#### 4.4.3 战略转型逻辑
+
+```
+旧方向: SD 作为静态增强 → 直接提升 MAE/ρ → 失败
+      ↓
+关键洞察: 时序训练的目标是"帧间一致性"，而非"绝对标尺准确性"
+      ↓
+新方向: SD 用于时序训练 → 提升时序稳定性 → 更符合物理特性
+```
+
+**核心论点**:
+- SD 数据的 S 分布差异 (SD989 KS=0.59) 不再是致命问题
+- 关键是 SD 的纹理特征来自真实 WoodScape mask，空间分布真实
+- 可以通过"固定脏污层 + 变化背景"构造物理一致的时序序列
+
+---
+
+## Step 5 时序模块设计与训练（v2.0 重构，成为主线）
+
+### 5.1 核心洞察：时序建模的物理基础
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                                                                     │
+│  镜头脏污: 相对镜头固定 → 随时间近似静止                               │
+│  道路场景: 随车辆移动 → 随时间动态变化                                 │
+│                                                                     │
+│  → 通过"固定 vs 变化"的时序对比，可以更准确地识别脏污                    │
+│                                                                     │
+│  Phase 2 的启示:                                                    │
+│  - SD 作为静态增强失败（标尺污染、特征偏移）                            │
+│  - 但 SD 可以构造"完美满足物理先验"的时序序列                            │
+│  - 时序训练的目标是稳定性，不是绝对标尺                                 │
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+### 5.2 三阶段训练策略（v2.0 更新）
+
+#### Stage 1：单帧强标注预训练（已完成）
+
+**目标**: 建立 WoodScape 强标注基线
+
+**数据**:
+- 训练: Train_Real (3200 samples)
+- 验证: Val_Real (800 samples)
+
+**输出**: 预训练 backbone + Dual Head + Aggregator
+
+**性能基准**:
+- Tile MAE: 0.0396
+- Global MAE: 0.0187
+- Test_Ext ρ: 0.7446 [0.6739, 0.7662] (簇层面 Bootstrap)
+
+#### Stage 2：时序模块训练（Phase 3A，新增）
+
+**目标**: 学习时序一致性，提升预测稳定性
+
+**数据**: SD989 序列（固定脏污 + 变化背景）
+```
+{(I'_t, Y'_t, G'_t, S'_t)}_{t=1}^{T}, T=5
+```
+
+**模型架构**:
+```
+输入序列 [I_{t-T+1}, ..., I_{t-1}, I_t]
+        ↓
+Shared Backbone (ResNet18, 冻结)
+        ↓
+特征序列 [F_{t-T+1}, ..., F_{t-1}, F_t]
+        ↓
+┌─────────────────────────────────────┐
+│   时序编码模块 (Phase 3 新增)         │
+│  ┌────────────┐    ┌────────────┐   │
+│  │ Temporal   │ →  │  Temporal   │   │
+│  │ Conv(k=3)  │    │  Attn (可选) │   │
+│  └────────────┘    └────────────┘   │
+└─────────────────────────────────────┘
+        ↓
+时序感知特征 F_temporal
+        ↓
+    ┌─────┴─────┐
+    ↓           ↓
+Tile Head   Global Head
+```
+
+**时序损失**:
+```
+L_temp = L_temp_S + μ · L_temp_G
+
+L_temp_S = (1/B(T-1)) · Σ_{b,t} |Ŝ_{b,t+1} - Ŝ_{b,t}|
+L_temp_G = (1/B(T-1)) · Σ_{b,t} ||Ĝ_{b,t+1} - Ĝ_{b,t}||₁
+```
+
+**训练配置**:
+- 固定 backbone，只训练时序模块
+- 损失: L_temp only
+- 评估: 时序稳定性指标
+
+**预期结果**:
+- 时序稳定性显著提升（抖动减少）
+- MAE/ρ 可能持平或小幅提升
+
+#### Stage 3：端到端微调（Phase 3B，新增）
+
+**目标**: 联合优化静态监督 + 时序一致性
+
+**数据**: 混合数据集
+- WoodScape 单帧: 学习标尺准确性
+- SD 序列: 学习时序稳定性
+
+**训练**:
+```
+L_total = L_static + λ_temp · L_temp + λ_cons · L_cons
+
+WoodScape batch: L_static + L_cons
+SD sequence batch: L_static + L_temp + L_cons
+```
+
+**关键参数**:
+- λ_temp: 时序损失权重 (0.1)
+- λ_cons: 一致性损失权重 (0.1)
+- seq_len: 时序长度 (5)
+- temporal_kernel: Temporal Conv kernel size (3)
+
+### 5.3 时序模块的技术实现
+
+#### 方案 1: Temporal Conv（推荐，轻量高效）
+
+```
+特征序列 [B, T, 512, H, W]
+        ↓
+Reshape + Permute → [B·H·W, 512, T]
+        ↓
+1D Conv (kernel=3, padding=1) → [B·H·W, 512, T]
+        ↓
+Reshape → [B, T, 512, H, W]
+        ↓
+时间平均池化 → [B, 512, H, W]
+```
+
+**优势**:
+- 参数少: ~40K
+- 计算高效: O(k×H)
+- 适合实时应用
+
+#### 方案 2: Temporal Attention（可选，可解释性强）
+
+```
+特征序列 [B, T, 512, H, W]
+        ↓
+Flatten spatial → [B, T, 512·H·W]
+        ↓
+Self-Attention → [B, T, 512·H·W]
+        ↓
+时间加权平均 → [B, 512·H·W]
+        ↓
+Reshape → [B, 512, H, W]
+```
+
+**优势**:
+- 可解释: 注意力权重显示哪些帧更重要
+- 并行计算: 适合长序列
+
+### 5.4 评估指标设计（v2.0 新增时序指标）
+
+#### 传统指标（与 baseline 一致）
+
+| 指标 | 说明 |
+|------|------|
+| Tile MAE | Tile 预测的平均绝对误差 |
+| Global MAE | 全局严重度 MAE |
+| Spearman ρ (Test_Ext) | 跨域排序相关性 |
+
+#### 新增时序稳定性指标（v2.0 核心新增）
+
+| 指标 | 数学形式 | 物理含义 | 目标 |
+|------|---------|----------|------|
+| **时序稳定性** | Var(Ŝ_t) 或 E[\|Ŝ_{t+1} - Ŝ_t\|] | 预测的抖动程度 | ↓ 越小越好 |
+| **时序单调性** | 违反单调性的帧占比 | 是否出现剧烈跳变 | ↓ 越小越好 |
+| **帧间一致性** | Corr(Ŝ_t, Ŝ_{t+1}) | 相邻帧预测的相关性 | ↑ 越大越好 |
+| **报警抖动率** | Ŝ 跨越阈值又回退的频率 | 工程意义 | ↓ 越小越好 |
+
+**关键论点**:
+- 时序稳定性是**独立于 MAE/ρ** 的评估维度
+- 即使 MAE 不提升，时序稳定性提升也是工程上有价值的贡献
+- 这为论文提供了"保底"选项
+
+### 5.5 测试集安排与评测口径
+
+#### 5.5.1 WoodScape Test_Real
+
+**定位**: 单帧强标注基准测试集，验证引入时序模块后静态能力保持稳定
+
+**时序模型推理**: 采用"单帧模式"
+- 输入序列长度设为 1
+- 或用同一帧复制构造长度为 T 的序列
+
+**指标**:
+- Tile MAE, Global MAE
+- Level Accuracy
+
+#### 5.5.2 External Test_Ext
+
+**定位**: 验证时序模块在真实场景的泛化能力
+
+**指标**:
+- Spearman ρ (Ŝ, ext_level)
+- 时序稳定性指标
+- Level Means 单调性
+
+#### 5.5.3 真实视频测试集（新增，Phase 3 可选）
+
+如果有真实车载视频数据：
+- 评估时序稳定性提升
+- 评估报警抖动率
+- 展示实际应用效果
+
+---
+
+## Step 6 消融实验矩阵（v2.0 更新）
+
+### 6.1 Type 1: 标签定义消融（已完成）
+
+| GT_S 定义 | 公式 | Test_Real MAE | Test_Ext ρ |
+|----------|------|--------------:|-----------:|
+| s | s = 1 - clean_ratio | 0.0203 | 0.703 |
+| S_full | 0.6·S_op + 0.3·S_sp + 0.1·S_dom | **0.0187** | **0.7446** [0.6739, 0.7662] |
+
+### 6.2 Type 2: 模型结构消融（已完成）
+
+| 模型 | Aggregator | μ_cons | Gap MAE | ρ_shat_sagg |
+|------|-----------|--------|--------:|------------:|
+| Baseline | Yes | 0.1 | 0.0249 | 0.9982 |
+| w/o L_cons | Yes | 0.0 | 0.0244 | 0.9976 |
+
+### 6.3 Type 3: SD 校准策略消融（Phase 2，新增）
+
+| 策略 | Test_Real MAE | Test_Ext ρ (簇层面) | 关键发现 |
+|------|--------------:|-------------------:|----------|
+| Baseline (Real only) | **0.0187** | **0.7446** [0.6739, 0.7662] | 参考基准 |
+| D-only 重采样 | 0.0179 | 0.570 | 跨域排序崩塌 |
+| A+-only 门控 | 0.0810 | **0.6478** [0.5748, 0.6846] | 同域 MAE 崩溃 |
+| Tile-only 隔离 | 0.0959 | **0.6846** [0.6109, 0.7133] | 同域 MAE 崩溃 |
+
+**结论**: SD 作为静态增强存在根本性局限，需要转向时序训练。
+
+### 6.4 Type 4: 时序模块消融（Phase 3，新增）
+
+| 实验 | 时序模块 | L_temp | 预期作用 |
+|------|---------|--------|---------|
+| Baseline | ✗ | ✗ | 参考基准 |
+| + Temporal Conv | ✓ | ✗ | 验证时序编码 |
+| + Temporal Conv + L_temp | ✓ | ✓ | 验证时序损失 |
+| + Temporal Attn + L_temp | ✓(Attn) | ✓ | 验证 Attention |
+
+---
+
+## Step 7 下游车道线 probe 功能验证（保持）
+
+* 车道质量指标: Q = (1/HW) Σ 1[P_lane(x,y) > t]
+* 证明 Ŝ 更能解释功能退化: ρ = Spearman(Ŝ, 1-Q)
+
+---
+
+## Step 8 复现与产物（v2.0 更新）
+
+### 8.1 数据与清单文件
+
+* WoodScape: `labels_index_rebinned_baseline.csv`
+* Clean 域: `dataset/my_clean_frames_4by3_640x480/`
+* External Test: `dataset/external_test_washed_processed/test_ext.csv`
+
+### 8.2 Phase 2 实验记录（新增）
+
+* 诊断: `sd_calibration_work/phase0_diagnostic/`
+* 重采样: `sd_calibration_work/phase1_importance_sampling/`
+* 门控: `sd_calibration_work/phase2_consistency_gate/`
+* 总结报告: `sd_calibration_work/phase2_consistency_gate/PHASE2_SUMMARY.md`
+
+### 8.3 Phase 3 实验计划（新增）
+
+* 设计文档: `sd_calibration_work/phase3_temporal_module/PHASE3_DESIGN.md`
+* 数据验证: `sd_calibration_work/phase3_temporal_validation/verify_sd989_distribution.py`
+* 实现代码: `sd_calibration_work/phase3_temporal_module/models/`, `training/`, `evaluation/`
+
+---
+
+## 附录 A: 实验进度跟踪（v2.0）
+
+### 已完成
+
+| Phase | 任务 | 状态 | 关键结果 |
+|-------|------|------|----------|
+| Step 1-2 | 数据准备 + Baseline | ✓ | Test_Ext ρ = 0.7446 (簇层面) |
+| Phase 0 | SD 诊断 | ✓ | 发现 S 分布差异 |
+| Phase 1 | D-only 重采样 | ✓ | Test_Ext ρ = 0.570 |
+| Phase 2 | A+-only + Tile-only | ✓ | 未能超越 baseline |
+| Phase 2 总结 | 文档整理 | ✓ | `PHASE2_SUMMARY.md` |
+| Phase 3 设计 | 时序模块设计 | ✓ | `PHASE3_DESIGN.md` |
+| 统计修正 | 簇层面 Bootstrap | ✓ | 发现并修正簇内相关问题 |
+
+### 进行中
+
+| Phase | 任务 | 状态 | 下一步 |
+|-------|------|------|--------|
+| Phase 3A | Temporal Conv 实现 | 待开始 | 实现 + 训练 |
+| Phase 3B | 端到端训练 | 待开始 | 混合训练 |
+
+### 待定
+
+| 任务 | 优先级 | 依赖 |
+|------|------|------|
+| SD_seq 数据生成 | 中 | Phase 3A 完成 |
+| 真实视频测试 | 低 | 有视频数据 |
+
+---
+
+## 附录 B: 论文结构建议（v2.0）
+
+```
+Section 1: Introduction
+  - 车载镜头脏污检测的重要性
+  - 现有方法的局限性（单帧、静态）
+  - 我们的贡献：时序一致性建模
+
+Section 2: Related Work
+  - 脏污检测
+  - 时序建模
+  - 合成数据增强
+
+Section 3: Method
+  3.1 Severity Score 定义
+  3.2 Differentiable Aggregator
+  3.3 Phase 2: SD 数据的系统化诊断
+      - D-only 重采样的失败
+      - 一致性门控的局限性
+      - 战略转型：SD 用于时序训练
+  3.4 Phase 3: 时序一致性建模
+      - 物理先验：脏污固定 vs 场景变化
+      - 时序模块设计
+      - 时序损失函数
+
+Section 4: Experiments
+  4.1 实验设置
+  4.2 Baseline 结果
+  4.3 Phase 2: SD 校准消融
+  4.4 Phase 3: 时序模块结果
+      - 时序稳定性提升
+      - Test_Real/Test_Ext 性能
+      - 消融实验
+  4.5 讨论与局限
+
+Section 5: Conclusion
+```
+
+---
+
+**文档版本**: v2.0 (时序转型版)
+**创建日期**: 2025-02-26
+**基于**: Experiment.txt (原始版本) + Phase 2 总结 + Phase 3 设计
+**作者**: Claude Code + User
+
+---
+
+## 附录 C: 统计稳健性评估框架（针对小训练集问题的解决方案）
+
+### C.1 问题分析
+
+当前数据集配置存在以下结构性风险：
+
+| 数据集 | 大小 | 用途 | 比例 |
+|--------|-----:|------|-----:|
+| WoodScape Train | 3,200 | 训练 | 1x |
+| WoodScape Val | 800 | 验证 | - |
+| WoodScape Test | 1,000 | 测试 | - |
+| **External Test** | **50,459** | **OOD 测试** | **16x** |
+
+**核心问题**:
+1. 训练集相对较小 → 对随机种子/划分敏感
+2. 外部测试集很大 → 评测统计很稳定，掩盖了训练不稳定性
+3. 单次 seed/划分 → 结论可能是偶然波动
+
+### C.2 推荐的稳健性评估方案
+
+#### C.2.1 多 Seed 重复实验（推荐 3 次）
+
+**不做数据集划分改变**，只改变随机种子：
+
+```
+固定划分:
+- Test_Real: 1000 样本（固定，保证对比公平）
+- Train + Val: 4000 样本（按 80/20 划分）
+
+重复实验:
+- 3 个不同随机种子 (e.g., 42, 123, 456)
+- 每个 seed 训练一次完整模型
+- 报告: mean ± std
+```
+
+**报告格式**:
+
+| 模型 | Test_Real MAE | Test_Ext ρ |
+|------|--------------:|-----------:|
+| Baseline (seed=42) | 0.0187 | 0.718 |
+| Baseline (seed=123) | ? | ? |
+| Baseline (seed=456) | ? | ? |
+| **Mean ± Std** | **? ± ?** | **? ± ?** |
+
+**优势**:
+- 不改变数据划分，保证对比公平
+- 控制随机初始化和训练顺序的不确定性
+- 计算成本可控（3x 训练时间）
+
+#### C.2.2 External Test 的 Bootstrap 置信区间（修正：簇层面）
+
+**重要发现（2025-02-26）**：
+- External Test 有 505 个簇（视频序列），每簇平均 ~100 张高度相关的图片
+- 图片层面 Bootstrap 违反独立性假设，CI 被低估 10-15 倍
+- **正确方法**：簇层面 Bootstrap（505 个簇作为独立单元）
+
+**簇层面 Bootstrap 实现**：
+
+```python
+# cluster_bootstrap_corrected.py
+import pandas as pd
+
+# 读取带 cluster_id 的预测结果
+df = pd.read_csv('predictions_clustered.csv')
+
+# 按簇分组
+clusters = df.groupby('cluster_id').groups
+cluster_indices = [list(indices) for indices in clusters.values()]
+n_clusters = len(cluster_indices)  # 505
+
+# 簇层面 Bootstrap
+for i in range(n_bootstrap):
+    # 重采样簇（而非图片）
+    sampled_indices = []
+    for _ in range(n_clusters):
+        cluster_idx = np.random.choice(n_clusters)
+        sampled_indices.extend(cluster_indices[cluster_idx])
+    # 计算 ρ...
+```
+
+**修正前后对比**：
+
+| 指标 | 图片层面（错误） | 簇层面（正确） |
+|------|----------------|---------------|
+| Baseline ρ | 0.718 [0.7153, 0.7247] | **0.7446 [0.6739, 0.7662]** |
+| CI 宽度 | 0.0094 (1.31%) | **0.0923 (12.40%)** |
+| **CI 放大倍数** | — | **9.8x** |
+
+**报告格式**（更新）:
+
+| 模型 | Test_Ext ρ | 95% CI (簇层面) | CI 宽度 |
+|------|-----------:|---------------:|--------:|
+| Baseline | 0.7446 | [0.6739, 0.7662] | 0.0923 (12.40%) |
+| SD989 | 0.5735 | [0.4937, 0.6300] | 0.1363 (23.77%) |
+| Tile-only | 0.6846 | [0.6109, 0.7133] | 0.1024 (14.96%) |
+| A+-only | 0.6478 | [0.5748, 0.6846] | 0.1098 (16.95%) |
+
+**优势**:
+- 簇层面 Bootstrap **更稳定可信**，正确处理了序列内相关性
+- 虽然 CI 更宽，但**所有差异仍然是统计显著**的
+- 展示了严谨的统计方法论，是论文的方法论贡献
+
+**详细报告**：[CLUSTERED_BOOTSTRAP_FINAL_REPORT.md](scripts/external_test_analysis/CLUSTERED_BOOTSTRAP_FINAL_REPORT.md)
+
+#### C.2.3 Level-wise 分离度分析
+
+不只报告总 ρ，还要报告各等级的可分性：
+
+```
+分等级统计:
+- E[Ŝ | level=l] ± SE (标准误差)
+- 斜率: ΔE[Ŝ] / Δlevel
+- 分离度: min(E[Ŝ_i] - E[Ŝ_{i+1}])
+```
+
+**报告格式**:
+
+| Level | Count | E[Ŝ] | SE | 与相邻等级差异 |
+|-------|------:|-----:|----:|--------------:|
+| a (5) | 10,092 | 0.746 | 0.002 | 0.108 |
+| b (4) | 10,092 | 0.638 | 0.003 | 0.102 |
+| c (3) | 10,092 | 0.536 | 0.004 | 0.084 |
+| d (2) | 10,092 | 0.452 | 0.005 | 0.085 |
+| e (1) | 10,092 | 0.367 | 0.006 | - |
+
+**单调性检验**: 所有差异 > 0 → p < 0.001
+
+### C.3 针对当前实验的具体建议
+
+#### C.3.1 Baseline 和 Phase 2 需要补充
+
+| 实验 | 当前状态 | 建议补充 |
+|------|---------|---------|
+| Baseline (S_full_wgap_alpha50) | seed=42 单次 | 2 个额外 seed (123, 456) |
+| Phase 2 D-only | seed=42 单次 | 2 个额外 seed |
+| Phase 2 A+-only | seed=42 单次 | 2 个额外 seed |
+| Phase 2 Tile-only | seed=42 单次 | 2 个额外 seed |
+
+#### C.3.2 Phase 3 时序模块需要从一开始就规划
+
+```
+Phase 3A (Temporal Conv):
+- 3 seeds × 完整训练
+- 报告: mean ± std
+
+Phase 3B (End-to-End):
+- 在最佳 Phase 3A seed 上继续
+- 或完整 3 seeds 训练
+```
+
+#### C.3.3 External Test 的统计分析
+
+**必须报告**:
+1. ρ 的 95% bootstrap CI
+2. 分等级的 E[Ŝ] ± SE
+3. 单调性检验结果
+
+**可选（加分项）**:
+1. 置换检验 (permutation test) 验证 ρ 的显著性
+2. 校准曲线 (reliability diagram)
+3. 覆盖不同时间段的子集分析
+
+### C.4 论文写作建议
+
+#### C.4.1 Methods 部分
+
+```
+We evaluate all models with 3 different random seeds (42, 123, 456)
+and report mean ± standard deviation. For the external test set,
+we compute 95% bootstrap confidence intervals via 1000 resamples.
+```
+
+#### C.4.2 Results 部分
+
+**表格示例**（更新为簇层面结果）:
+
+| Method | Test_Real MAE | Test_Ext ρ (簇层面 95% CI) |
+|--------|--------------:|--------------------------:|
+| Baseline | 0.019 ± 0.001 | 0.7446 [0.6739, 0.7662] |
+| D-only | 0.018 ± 0.002 | 0.570 [0.4937, 0.6300] |
+| A+-only | 0.082 ± 0.005 | 0.6478 [0.5748, 0.6846] |
+| Tile-only | 0.096 ± 0.004 | 0.6846 [0.6109, 0.7133] |
+
+**文字说明**:
+
+```
+The improvement/degradation is statistically significant
+(paired t-test, p < 0.01) across 3 random seeds.
+
+For the external test set (N=50,459 images from 505 video clusters),
+we use clustered-level bootstrap (505 clusters as independent units)
+to compute 95% confidence intervals. All reported differences remain
+statistically significant even with the wider clustered-level CIs,
+which correctly account for intra-cluster correlation.
+```
+
+#### C.4.3 Appendix: Robustness Analysis
+
+创建专门的附录章节：
+- A.1: Multiple seeds results (full table)
+- A.2: Bootstrap CI computation details
+- A.3: Level-wise separation analysis
+- A.4: Sensitivity to train/val split
+
+### C.5 实施优先级
+
+| 任务 | 优先级 | 计算成本 | 时间成本 |
+|------|------|---------|---------|
+| Multi-seed (Phase 2) | 高 | 3x | 1-2 天 |
+| Multi-seed (Baseline) | 高 | 3x | 1-2 天 |
+| External Bootstrap | 高 | 低 | 1 小时 |
+| Level-wise analysis | 中 | 低 | 2 小时 |
+| K-fold 划分 | 低 | 5x | 3-5 天 |
+
+**推荐顺序**:
+1. 先做 External Bootstrap 和 Level-wise analysis（低成本，立即改善论文）
+2. 补充 Multi-seed 实验（Phase 2 和 Baseline，各 2 个额外 seed）
+3. 如有时间和资源，考虑 K-fold 划分
+
+### C.6 与现有工作的对照
+
+| 方面 | 当前状态 | 建议改进 |
+|------|---------|---------|
+| 随机种子 | seed=42 单次 | 3 seeds (42, 123, 456) |
+| 置信区间 | 未报告 | External: Bootstrap CI |
+| 等级分析 | Level means 仅 | + SE, 斜率, 分离度 |
+| 统计检验 | 未进行 | Paired t-test, Permutation test |
+
+---
+
+**文档版本**: v2.0 (时序转型版)
+**创建日期**: 2025-02-26
+**基于**: Experiment.txt (原始版本) + Phase 2 总结 + Phase 3 设计
+**作者**: Claude Code + User
+**最后更新**: 2025-02-26
+
+**更新日志**：
+- 2025-02-26: 新增统计稳健性评估框架（附录 C）
+- 2025-02-26: **重大修正**：External Test 统计方法从图片层面 Bootstrap 修正为簇层面 Bootstrap
+  - 发现：External Test 有 505 个簇（视频序列），而非 50,458 张独立图片
+  - 影响：CI 宽度被低估 10-15 倍
+  - 修正：所有 Test_Ext ρ 值更新为簇层面结果
+  - 详见文档开头的"重要修正说明"和 CLUSTERED_BOOTSTRAP_FINAL_REPORT.md

@@ -1,0 +1,45 @@
+{
+  "experiment_id": "",
+  "target": "",
+  "severity_config": "v1.0_wgap_alpha50",
+  "generation_config": "v1.0",
+  "data_config": {
+    "real_source": "Train_Real",
+    "syn_source": "Train_Syn",
+    "real_samples": 3200,
+    "syn_samples": 0,
+    "sampling_strategy": "stratified",
+    "synthetic_config": ""
+  },
+  "model_config": {
+    "backbone": "resnet18",
+    "tile_size": 8,
+    "pretrained": true,
+    "dual_head": true
+  },
+  "training_config": {
+    "epochs": 40,
+    "batch_size": 16,
+    "lr": 0.0003,
+    "weight_decay": 0.01,
+    "seed": 42,
+    "loss_weights": {
+      "lambda_tile": 1.0,
+      "lambda_global": 1.0,
+      "mu_cons": 0.1
+    },
+    "use_consistency_loss": true
+  },
+  "quality_config": {
+    "background_ssim_threshold": 0.95,
+    "background_diff_threshold": 0.05,
+    "qD_threshold": 0.5,
+    "qT_threshold": 0.5,
+    "use_q_filter": false
+  },
+  "evaluation": {
+    "woodscape_test": "dataset/woodscape_processed/meta/splits/test.txt",
+    "external_test": "dataset/external_test_washed_processed/test_ext.csv",
+    "mapping_rule": "scale_to_1_5"
+  }
+}

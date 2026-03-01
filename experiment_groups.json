@@ -1,0 +1,41 @@
+{
+  "G1": {
+    "name": "Baseline",
+    "description": "仅使用真实数据训练",
+    "data_config": {
+      "use_synthetic": false,
+      "real_samples": 3200
+    },
+    "priority": "P0"
+  },
+  "G2": {
+    "name": "Filtered",
+    "description": "真实数据 + 质量筛选后的合成数据",
+    "data_config": {
+      "use_synthetic": true,
+      "syn_samples": 5000,
+      "filtering": "hard_constraints_qD_qT"
+    },
+    "priority": "P0"
+  },
+  "G3": {
+    "name": "Weighted",
+    "description": "真实数据 + 动态加权的合成数据",
+    "data_config": {
+      "use_synthetic": true,
+      "syn_samples": 5000,
+      "sampling": "soft_weighting"
+    },
+    "priority": "P1"
+  },
+  "G4": {
+    "name": "Naïve",
+    "description": "真实数据 + 无筛选合成数据（对照）",
+    "data_config": {
+      "use_synthetic": true,
+      "syn_samples": 5000,
+      "filtering": "none"
+    },
+    "priority": "P2"
+  }
+}

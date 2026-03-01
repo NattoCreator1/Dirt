@@ -1,0 +1,13 @@
+File ID: 1831_RV
+Original Caption: noticeable opaque heavy stains, on camera lens, out of focus foreground, subtle glare, background visible
+Fixed Caption: noticeable opaque heavy stains, on camera lens, out of focus foreground, subtle glare, background visible
+
+Class Ratios:
+  C1 (transparent): 0.0%
+  C2 (semi-transparent): 9.5%
+  C3 (opaque): 47.3%
+
+Original Dominant Class: C3 (opaque)
+Fixed Dominant Class: C3 (opaque)
+
+Severity: noticeable (S_full=0.599)

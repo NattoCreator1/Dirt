@@ -1,0 +1,10 @@
+{
+  "manual_n": 680,
+  "manual_s_mean": 0.5729751770905055,
+  "manual_error_mean": 0.3752859668011832,
+  "manual_bias_mean": -0.3220673285013832,
+  "baseline_n": 989,
+  "baseline_s_mean": 0.2671949240040972,
+  "baseline_error_mean": 0.024548049703526614,
+  "baseline_bias_mean": -0.005498406468797345
+}
